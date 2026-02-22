@@ -1,0 +1,34 @@
+{% include 'header.html' %}
+<body>
+<div class="container">
+    <div class="row">
+        <h1>Basic Forum</h1><br>
+        {% include 'navbar.html' %}
+        {% if request.args.get('category_id') %}
+            <div class="single category">
+                <span style="font-size: 20px;"><a href="{{ url_for('category') }}"><< {{ category.name }}</a></span>
+                <br> <br>
+                <ul class="list-unstyled">
+                    <li class="text-right">
+                        <a type="button" href="{{ url_for('compose', category_id=category.category_id) }}" class="btn btn-primary"><span style="font-size: 20px; font-weight: bold; color: white;">Create New Topic</span></a>
+                    </li><br>
+                    <li><span style="font-size:20px;font-weight:bold;">Topics</span> <span class="pull-right"><span style="font-size:15px;font-weight:bold;">Posts</span></span></li>
+					{% for topic in topics %}
+						<li><a href="{{url_for('post', topic_id=topic.topic_id)}}" title="">{{topic.subject}} <span class="pull-right">{{topic.total_post}}</span></a></li>
+					{% endfor %}
+                </ul>
+            </div>
+        {% else %}
+            <div class="single category">
+                <ul class="list-unstyled">
+                    <li><span style="font-size: 25px; font-weight: bold;">Categories</span> <span class="pull-right"><span style="font-size:20px;font-weight:bold;">Topics</span></span></li>
+                    {% for category in categories %}
+                        <li><a href="{{ url_for('category', category_id=category.category_id) }}">{{ category.name }} <span class="pull-right">{{ category.total_topic }}</span></a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+    </div>
+</div>
+</body>
+</html>

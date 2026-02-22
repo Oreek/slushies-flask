@@ -1,0 +1,13 @@
+{% if session['userid'] %}
+<h3>
+    <a href="{{ url_for('category') }}">Home</a>
+    | Logged in : {{ session.name }}
+    | <a href="{{ url_for('logout') }}">Logout</a>
+    | <a href="#" target="_blank" class="pull-right">Control Panel</a>
+</h3>
+{% else %}
+<h3>
+    <a href="{{ url_for('category') }}">Home</a>
+    | <a href="{{ url_for('login') }}">Login</a>
+    | <a href="#" >Control Panel</a>
+</h3>
