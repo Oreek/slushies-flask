@@ -1,0 +1,25 @@
+{% include 'header.html' %}
+<body>
+<div class="container">
+    <div class="row">
+        <h2>Oreek's Forum</h2>
+        {% include 'navbar.html' %}
+        <br>
+        <span style="font-size: 20px;"><a href="{{ url_for('category') }}"><< {{ topic.subject }}</a></span>
+        <br><br>
+        <div class="createNewtopic">
+            <form action="{{ url_for('save_edit') }}" id="topicForm" method="post" name="topicForm">
+                <div class="form-group">
+					<label for="message">Message:</label>
+					<textarea class="form-control" name="message" id="message" rows="5">{{post.message}}</textarea>
+				</div>
+                <input type="hidden" name="action" value="saveEdit">
+				<input type="hidden" name="postId" value="{{post.post_id}}">
+				<input type="hidden" name="topicId" value="{{topic.topic_id}}">
+				<button type="submit" id="savePost" name="savePost" class="btn btn-info">Save Edit</button>
+            </form>
+        </div>
+    </div>
+</div>
+</body>
+</html>
