@@ -2,13 +2,14 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from flask_mysqldb import MySQL
 import MySQLdb.cursors
 import hashlib
+import os
 
 app = Flask(__name__)
-app.secret_key = "meowmeowguliguli"
-app.config['MYSQL_HOST'] = 'localhost'
-app.config['MYSQL_USER'] = 'forumapp'
-app.config['MYSQL_PASSWORD'] = 'guliguli'
-app.config['MYSQL_DB'] = 'forums'
+app.secret_key = os.environ.get('SECRET_KEY', 'meowmeowguliguli')
+app.config['MYSQL_HOST'] = os.environ.get('MYSQL_HOST', 'localhost')
+app.config['MYSQL_USER'] = os.environ.get('MYSQL_USER', 'forumapp')
+app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQL_PASSWORD', 'guliguli')
+app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB', 'forums')
 mysql = MySQL(app)
 
 @app.route('/')
