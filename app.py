@@ -1,16 +1,21 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-from flask_mysqldb import MySQL
-import MySQLdb.cursors
+import pymysql
+import pymysql.cursors
 import hashlib
 import os
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'meowmeowguliguli')
-app.config['MYSQL_HOST'] = os.environ.get('MYSQL_HOST', 'localhost')
-app.config['MYSQL_USER'] = os.environ.get('MYSQL_USER', 'forumapp')
-app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQL_PASSWORD', 'guliguli')
-app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB', 'forums')
-mysql = MySQL(app)
+
+MYSQL_CONFIG = {
+    'host': os.environ.get('MYSQL_HOST', 'localhost'),
+    'user': os.environ.get('MYSQL_USER', 'forumapp'),
+    'password': os.environ.get('MYSQL_PASSWORD', 'guliguli'),
+    'database': os.environ.get('MYSQL_DB', 'forums'),
+}
+
+def get_db():
+    return pymysql.connect(**MYSQL_CONFIG, cursorclass=pymysql.cursors.DictCursor)
 
 @app.route('/')
 @app.route('/login', methods =['GET', 'POST'])
@@ -19,9 +24,11 @@ def login():
     if request.method == 'POST' and 'email' in request.form and 'password' in request.form:
         email = request.form['email']
         password = hashlib.md5((request.form['password']).encode('ISO-8859-1')).hexdigest()
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-        cursor.execute('SELECT * FROM forum_users WHERE email = % s AND password = %s', (email, password,))
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM forum_users WHERE email = %s AND password = %s', (email, password,))
         user = cursor.fetchone()
+        conn.close()
         if user:
             session['loggedin'] = True
             session['userid'] = user['user_id']
@@ -42,18 +49,22 @@ def register():
         email = request.form['email']
         password = hashlib.md5((request.form['password']).encode('ISO-8859-1')).hexdigest()
 
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+        conn = get_db()
+        cursor = conn.cursor()
 
         cursor.execute('SELECT * FROM forum_users WHERE email = %s', (email,))
         account = cursor.fetchone()
 
         if account:
+            conn.close()
             mesage = 'Account already exists!'
         elif not name or not email or not password:
+            conn.close()
             mesage = 'Please fill out the form!'
         else:
             cursor.execute('INSERT INTO forum_users (name, email, password, usergroup) VALUES (%s, %s, %s, %s)', (name, email, password, 'member'))
-            mysql.connection.commit()
+            conn.commit()
+            conn.close()
             mesage = 'You have successfully registered! Please login.'
             return redirect(url_for('login'))
 
@@ -71,8 +82,9 @@ def logout():
 
 @app.route('/category', methods = ['GET', 'POST'])
 def category():
+    conn = get_db()
+    cursor = conn.cursor()
     if request.args.get('category_id'):
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
         cursor.execute(
             'SELECT c.name, t.category_id, t.subject, t.topic_id, t.user_id, '
             'count(p.post_id) AS total_post '
@@ -90,11 +102,11 @@ def category():
             (request.args.get('category_id'),)
         )
         category = cursor.fetchone()
+        conn.close()
 
         return render_template("category.html", topics=topics, category=category, request=request)
 
     else:
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
         cursor.execute(
             'SELECT category.category_id, category.name, category.description, '
             'count(topic.category_id) AS total_topic '
@@ -103,16 +115,19 @@ def category():
             'GROUP BY category.category_id ORDER BY category_id DESC'
         )
         categories = cursor.fetchall()
+        conn.close()
         return render_template("category.html", categories=categories, request=request)
 
 @app.route('/compose', methods = ['GET', 'POST'])
 def compose():
     if 'loggedin' in session:
         if request.args.get('category_id'):
-            cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+            conn = get_db()
+            cursor = conn.cursor()
 
             cursor.execute('SELECT category_id, name FROM forum_category WHERE category_id = %s ', (request.args.get('category_id'),))
             category = cursor.fetchone()
+            conn.close()
 
             return render_template('compose.html', category = category)
 
@@ -121,7 +136,8 @@ def compose():
 @app.route("/save_topic", methods = ['GET', 'POST'])
 def save_topic():
     if 'loggedin' in session:
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+        conn = get_db()
+        cursor = conn.cursor()
         if request.method == 'POST' and 'categoryId' in request.form and 'topicName' in request.form and 'message' in request.form:
 
             categoryId = request.form['categoryId']
@@ -129,11 +145,12 @@ def save_topic():
             message = request.form['message']
 
             cursor.execute('INSERT INTO forum_topics (`subject`, `category_id`, `user_id`) VALUES (%s, %s, %s)', (topicName, categoryId, session['userid']))
-            mysql.connection.commit()
+            conn.commit()
 
             lastInsertTopicId = cursor.lastrowid
             cursor.execute('INSERT INTO forum_posts (`message`, `topic_id`, `user_id`) VALUES (%s, %s, %s)', (message, lastInsertTopicId, session['userid']))
-            mysql.connection.commit()
+            conn.commit()
+            conn.close()
 
             return redirect(url_for('category', category_id=categoryId))
 
@@ -141,7 +158,8 @@ def save_topic():
 
 @app.route('/post', methods = ['GET', 'POST'])
 def post():
-    cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+    conn = get_db()
+    cursor = conn.cursor()
     if request.args.get('topic_id'):
 
         cursor.execute('SELECT topic_id, subject, category_id FROM forum_topics WHERE topic_id = %s ', (request.args.get('topic_id'),))
@@ -150,19 +168,22 @@ def post():
         cursor.execute('SELECT p.post_id, p.message, p.topic_id, p.user_id, p.created, u.name AS username FROM forum_posts p LEFT JOIN forum_users u ON u.user_id = p.user_id WHERE p.topic_id = %s ', (request.args.get('topic_id'),))
 
         posts = cursor.fetchall()
+        conn.close()
 
         return render_template('post.html', topic = topic, posts = posts)
 
 @app.route('/save_post', methods = ['GET', 'POST'])
 def save_post():
     if 'loggedin' in session:
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+        conn = get_db()
+        cursor = conn.cursor()
         if request.method == 'POST' and 'topic_id' in request.form and 'message' in request.form:
             topicId = request.form['topic_id']
             message = request.form['message']
 
             cursor.execute('INSERT INTO forum_posts (`message`, `topic_id`, `user_id`) VALUES (%s, %s, %s)', (message, topicId, session['userid']))
-            mysql.connection.commit()
+            conn.commit()
+            conn.close()
 
             return redirect(url_for('post', topic_id=topicId))
 
@@ -171,7 +192,8 @@ def save_post():
 @app.route('/edit_post', methods = ['GET', 'POST'])
 def edit_post():
     if 'loggedin' in session:
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+        conn = get_db()
+        cursor = conn.cursor()
         if request.args.get('post_id'):
             postId = request.args.get('post_id')
 
@@ -179,6 +201,7 @@ def edit_post():
             post = cursor.fetchone()
             cursor.execute('SELECT topic_id, subject, category_id FROM forum_topics WHERE topic_id = %s ', (post['topic_id'],))
             topic = cursor.fetchone()
+            conn.close()
 
             return render_template('edit_post.html', post = post, topic = topic)
 
@@ -187,14 +210,16 @@ def edit_post():
 @app.route('/save_edit', methods = ['GET', 'POST'])
 def save_edit():
     if 'loggedin' in session:
-        cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+        conn = get_db()
+        cursor = conn.cursor()
         if request.method == 'POST' and 'postId' in request.form and 'message' in request.form:
             postId = request.form['postId']
             message = request.form['message']
             topicId = request.form['topicId']
 
             cursor.execute('UPDATE forum_posts SET message = %s WHERE post_id = %s', (message, postId ))
-            mysql.connection.commit()
+            conn.commit()
+            conn.close()
 
             return redirect(url_for('post', topic_id = topicId))
 
@@ -206,15 +231,18 @@ def delete_post():
     if 'loggedin' in session:
         postId = request.args.get('post_id')
         if postId:
-            cursor = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
+            conn = get_db()
+            cursor = conn.cursor()
 
             cursor.execute('SELECT post_id, topic_id, user_id FROM forum_posts WHERE post_id = %s', (postId,))
             post = cursor.fetchone()
 
             if post and (post['user_id'] == session['userid'] or session.get('role') == 'admin'):
                 cursor.execute('DELETE FROM forum_posts WHERE post_id = %s', (postId,))
-                mysql.connection.commit()
+                conn.commit()
+                conn.close()
                 return redirect(url_for('post', topic_id=post['topic_id']))
+            conn.close()
 
     return redirect(url_for('login'))
 
